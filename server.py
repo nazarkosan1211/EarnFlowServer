@@ -8,14 +8,13 @@ import os
 app = Flask(__name__)
 CORS(app)
 
-# Database config
 DB_NAME = "users.db"
+
 MAX_TASKS_PER_DAY = 30
 COOLDOWN_SECONDS = 15
 REF_BONUS = 10
 MAX_REF_PER_DAY = 20
 
-# Helper functions
 def db():
     return sqlite3.connect(DB_NAME)
 
