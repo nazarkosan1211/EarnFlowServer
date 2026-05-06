@@ -205,6 +205,32 @@ def add_coin():
         "ref_count": ref_count
     })
 
+@app.route("/leaderboard")
+def leaderboard():
+    conn = db()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT user_id, coins
+        FROM users
+        ORDER BY coins DESC, user_id ASC
+        LIMIT 10
+    """)
+    rows = cur.fetchall()
+    conn.close()
+
+    # Build leaderboard data
+    leaderboard_data = []
+    for i, row in enumerate(rows, start=1):
+        user_id, coins = row
+        leaderboard_data.append({
+            "rank": i,
+            "user_id": user_id,
+            "coins": coins,
+            "name": f"User {user_id}"  # bisa diganti nanti pakai username Telegram
+        })
+
+    return jsonify(leaderboard_data)
+
 @app.route("/debug_users")
 def debug_users():
     conn = db()
