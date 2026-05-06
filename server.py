@@ -1,4 +1,4 @@
-# server.py (Full EarnFlow version)
+# server.py
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import sqlite3
@@ -18,6 +18,7 @@ COOLDOWN_SECONDS = 15
 REF_BONUS = 10
 MAX_REF_PER_DAY = 20
 
+# Helper functions
 def db():
     return sqlite3.connect(DB_NAME)
 
@@ -51,10 +52,7 @@ def init_db():
 def add_user(user_id):
     conn = db()
     cur = conn.cursor()
-    cur.execute(
-        "INSERT OR IGNORE INTO users (user_id, coins) VALUES (?, 0)",
-        (str(user_id),)
-    )
+    cur.execute("INSERT OR IGNORE INTO users (user_id, coins) VALUES (?, 0)", (str(user_id),))
     cur.execute("""
         UPDATE users
         SET task_date = CASE WHEN task_date='' THEN ? ELSE task_date END,
@@ -86,6 +84,7 @@ def reset_daily(user_id):
     conn.commit()
     conn.close()
 
+# Routes
 @app.route("/")
 def home():
     return jsonify({"status": "server alive"})
@@ -95,16 +94,12 @@ def start_user():
     data = request.get_json()
     user_id = str(data.get("user_id"))
     ref = data.get("ref")
-
     if not user_id or user_id == "None":
         return jsonify({"error": "no user_id"}), 400
-
     add_user(user_id)
     reset_daily(user_id)
-
     bonus_given = False
     message = "no_ref"
-
     if ref:
         ref = str(ref)
         if ref == user_id:
@@ -139,36 +134,23 @@ def start_user():
         conn.close()
         bonus_given = True
         message = "ref_bonus_given"
-
-    return jsonify({
-        "status": "ok",
-        "message": message,
-        "bonus_given": bonus_given
-    })
+    return jsonify({"status": "ok", "message": message, "bonus_given": bonus_given})
 
 @app.route("/add_coin", methods=["POST"])
 def add_coin():
     data = request.get_json()
     user_id = str(data.get("user_id"))
     amount = int(data.get("amount", 1))
-
     if not user_id or user_id == "None":
         return jsonify({"error": "no user_id"}), 400
-
     add_user(user_id)
     reset_daily(user_id)
-
     conn = db()
     cur = conn.cursor()
-    cur.execute("""
-        SELECT coins, tasks_done, last_task_time, ref_count
-        FROM users
-        WHERE user_id=?
-    """, (user_id,))
+    cur.execute("SELECT coins, tasks_done, last_task_time, ref_count FROM users WHERE user_id=?", (user_id,))
     row = cur.fetchone()
     coins, tasks_done, last_time, ref_count = row
     now = int(time.time())
-
     if amount == 0:
         conn.close()
         return jsonify({
@@ -178,7 +160,6 @@ def add_coin():
             "remaining_tasks": MAX_TASKS_PER_DAY - tasks_done,
             "ref_count": ref_count
         })
-
     if tasks_done >= MAX_TASKS_PER_DAY:
         conn.close()
         return jsonify({
@@ -189,7 +170,6 @@ def add_coin():
             "remaining_tasks": 0,
             "ref_count": ref_count
         })
-
     if now - last_time < COOLDOWN_SECONDS:
         wait = COOLDOWN_SECONDS - (now - last_time)
         conn.close()
@@ -202,7 +182,6 @@ def add_coin():
             "remaining_tasks": MAX_TASKS_PER_DAY - tasks_done,
             "ref_count": ref_count
         })
-
     coins += amount
     tasks_done += 1
     cur.execute("""
@@ -242,7 +221,7 @@ def debug_users():
         } for r in rows
     ])
 
-# Inisialisasi database
+# Initialize DB
 init_db()
 
 if __name__ == "__main__":
