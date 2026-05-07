@@ -1,4 +1,4 @@
 flask
 flask-cors
-gunicorn
 python-telegram-bot[webhooks]==20.3
+gunicorn
