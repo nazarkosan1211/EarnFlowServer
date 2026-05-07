@@ -1,14 +1,10 @@
 import os
-from flask import Flask, jsonify, request
-from flask_cors import CORS
-from datetime import date, datetime
-import time
 import sqlite3
+import time
+from datetime import date
+from flask import Flask, request, jsonify
+from flask_cors import CORS
 
-# ========================
-# CONFIG
-# ========================
-PORT = int(os.environ.get("PORT", 5000))
 app = Flask(__name__)
 CORS(app)
 
@@ -18,9 +14,6 @@ COOLDOWN_SECONDS = 15
 REF_BONUS = 10
 MAX_REF_PER_DAY = 20
 
-# ========================
-# DATABASE HELPERS
-# ========================
 def db():
     return sqlite3.connect(DB_NAME)
 
@@ -36,11 +29,12 @@ def ensure_column(cur, table, column, definition):
 def init_db():
     conn = db()
     cur = conn.cursor()
+
     cur.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            user_id TEXT PRIMARY KEY,
-            coins INTEGER DEFAULT 0
-        )
+    CREATE TABLE IF NOT EXISTS users (
+        user_id TEXT PRIMARY KEY,
+        coins INTEGER DEFAULT 0
+    )
     """)
     ensure_column(cur, "users", "tasks_done", "INTEGER DEFAULT 0")
     ensure_column(cur, "users", "task_date", "TEXT DEFAULT ''")
@@ -86,11 +80,6 @@ def reset_daily(user_id):
     conn.commit()
     conn.close()
 
-init_db()
-
-# ========================
-# ROUTES
-# ========================
 @app.route("/")
 def home():
     return jsonify({"status": "server alive"})
@@ -102,13 +91,10 @@ def start_user():
     ref = data.get("ref")
     if not user_id or user_id == "None":
         return jsonify({"error": "no user_id"}), 400
-
     add_user(user_id)
     reset_daily(user_id)
-
     bonus_given = False
     message = "no_ref"
-
     if ref:
         ref = str(ref)
         if ref == user_id:
@@ -126,13 +112,11 @@ def start_user():
             conn.close()
             return jsonify({"status": "ok", "message": "already_referred"})
         ref_user_id, ref_coins, ref_count = referrer
-        if ref_count >= MAX_REF_PER_DAY:
-            cur.execute("UPDATE users SET referrer_id=? WHERE user_id=?", (ref, user_id))
-            conn.commit()
-            conn.close()
-            return jsonify({"status": "ok", "message": "ref_limit_reached"})
-        ref_coins += REF_BONUS
-        ref_count += 1
+        if ref_count < MAX_REF_PER_DAY:
+            ref_coins += REF_BONUS
+            ref_count += 1
+            bonus_given = True
+            message = "ref_bonus_given"
         cur.execute("UPDATE users SET referrer_id=? WHERE user_id=?", (ref, user_id))
         cur.execute("""
             UPDATE users
@@ -141,9 +125,6 @@ def start_user():
         """, (ref_coins, ref_count, today_str(), ref))
         conn.commit()
         conn.close()
-        bonus_given = True
-        message = "ref_bonus_given"
-
     return jsonify({"status": "ok", "message": message, "bonus_given": bonus_given})
 
 @app.route("/add_coin", methods=["POST"])
@@ -153,7 +134,6 @@ def add_coin():
     amount = int(data.get("amount", 1))
     if not user_id or user_id == "None":
         return jsonify({"error": "no user_id"}), 400
-
     add_user(user_id)
     reset_daily(user_id)
     conn = db()
@@ -164,14 +144,18 @@ def add_coin():
     now = int(time.time())
     if amount == 0:
         conn.close()
-        return jsonify({"status": "sync","coins": coins,"tasks_done": tasks_done,"remaining_tasks": MAX_TASKS_PER_DAY - tasks_done,"ref_count": ref_count})
+        return jsonify({"status": "sync", "coins": coins, "tasks_done": tasks_done,
+                        "remaining_tasks": MAX_TASKS_PER_DAY - tasks_done, "ref_count": ref_count})
     if tasks_done >= MAX_TASKS_PER_DAY:
         conn.close()
-        return jsonify({"status": "blocked","reason": "daily_limit","coins": coins,"tasks_done": tasks_done,"remaining_tasks": 0,"ref_count": ref_count})
+        return jsonify({"status": "blocked", "reason": "daily_limit", "coins": coins,
+                        "tasks_done": tasks_done, "remaining_tasks": 0, "ref_count": ref_count})
     if now - last_time < COOLDOWN_SECONDS:
         wait = COOLDOWN_SECONDS - (now - last_time)
         conn.close()
-        return jsonify({"status": "blocked","reason": "cooldown","wait": wait,"coins": coins,"tasks_done": tasks_done,"remaining_tasks": MAX_TASKS_PER_DAY - tasks_done,"ref_count": ref_count})
+        return jsonify({"status": "blocked", "reason": "cooldown", "wait": wait,
+                        "coins": coins, "tasks_done": tasks_done,
+                        "remaining_tasks": MAX_TASKS_PER_DAY - tasks_done, "ref_count": ref_count})
     coins += amount
     tasks_done += 1
     cur.execute("""
@@ -181,21 +165,21 @@ def add_coin():
     """, (coins, tasks_done, today_str(), now, user_id))
     conn.commit()
     conn.close()
-    return jsonify({"status": "success","coins": coins,"tasks_done": tasks_done,"remaining_tasks": MAX_TASKS_PER_DAY - tasks_done,"ref_count": ref_count})
+    return jsonify({"status": "success", "coins": coins, "tasks_done": tasks_done,
+                    "remaining_tasks": MAX_TASKS_PER_DAY - tasks_done, "ref_count": ref_count})
 
-@app.route("/leaderboard", methods=["GET"])
+@app.route("/leaderboard")
 def leaderboard():
     conn = db()
     cur = conn.cursor()
     cur.execute("SELECT user_id, coins FROM users ORDER BY coins DESC LIMIT 10")
     rows = cur.fetchall()
     conn.close()
-    data = [{"user_id": r[0], "coins": r[1]} for r in rows]
-    return jsonify(data)
+    result = [{"user_id": r[0], "coins": r[1]} for r in rows]
+    return jsonify(result)
 
-# ========================
-# RUN
-# ========================
+init_db()
+
 if __name__ == "__main__":
-    print(f"Server ready on port {PORT}")
-    app.run(host="0.0.0.0", port=PORT)
+    import os
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
