@@ -5,15 +5,24 @@ from datetime import date
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
+# ========================
+# INIT APP
+# ========================
 app = Flask(__name__)
 CORS(app)
 
+# ========================
+# CONFIG
+# ========================
 DB_NAME = "users.db"
 MAX_TASKS_PER_DAY = 30
 COOLDOWN_SECONDS = 15
 REF_BONUS = 10
 MAX_REF_PER_DAY = 20
 
+# ========================
+# DATABASE HELPERS
+# ========================
 def db():
     return sqlite3.connect(DB_NAME)
 
@@ -29,7 +38,6 @@ def ensure_column(cur, table, column, definition):
 def init_db():
     conn = db()
     cur = conn.cursor()
-
     cur.execute("""
     CREATE TABLE IF NOT EXISTS users (
         user_id TEXT PRIMARY KEY,
@@ -45,6 +53,9 @@ def init_db():
     conn.commit()
     conn.close()
 
+# ========================
+# USER HELPERS
+# ========================
 def add_user(user_id):
     conn = db()
     cur = conn.cursor()
@@ -80,6 +91,9 @@ def reset_daily(user_id):
     conn.commit()
     conn.close()
 
+# ========================
+# ROUTES
+# ========================
 @app.route("/")
 def home():
     return jsonify({"status": "server alive"})
@@ -178,8 +192,13 @@ def leaderboard():
     result = [{"user_id": r[0], "coins": r[1]} for r in rows]
     return jsonify(result)
 
+# ========================
+# INIT DB
+# ========================
 init_db()
 
+# ========================
+# RUN SERVER
+# ========================
 if __name__ == "__main__":
-    import os
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
